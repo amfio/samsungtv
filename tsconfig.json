@@ -1,0 +1,28 @@
+{
+    "compilerOptions": {
+      "module": "esnext",
+      "declaration": true,
+      "declarationMap": true,
+      "downlevelIteration": true,
+      "noImplicitAny": true,
+      "preserveConstEnums": true,
+      "sourceMap": true,
+      "target": "es5",
+      "noUnusedLocals": true,
+      "skipLibCheck": true,
+      "moduleResolution": "node",
+      "resolveJsonModule": true,
+      "importHelpers": true,
+      "esModuleInterop": true,
+      "jsx": "react",
+      "lib": [
+        "dom",
+        "es2020",
+      ],
+      "outDir": "dist",
+    },
+    "include": [
+        "src/**/*.ts",
+        "src/*.ts",
+    ],
+}
