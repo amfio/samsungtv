@@ -35,8 +35,11 @@ export interface SamsungMetadata {
 export enum SamsungEvent {
     Unauthorised = 'ms.channel.unauthorized',
     Connect = 'ms.channel.connect',
+    InstalledApps = 'ed.installedApp.get',
+    LaunchApp = 'ed.apps.launch',
 }
 
 export enum SamsungKey {
-    
+    Menu = 'KEY_MENU',
+    Exit = 'KEY_EXIT',
 }

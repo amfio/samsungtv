@@ -20,7 +20,11 @@ export class TokenCache {
         this.fileLocation = (typeof this.config.cacheToken === 'object' && this.config.cacheToken.cacheLocation) || DEFAULT_CACHE_LOCATION;
     }
 
-    public saveToken(token: string) {    
+    public saveToken(token: string) {
+        if (!this.config.cacheToken) {
+            return;
+        }
+
         let cache: TokenCacheFileFormat = {};
         if (existsSync(this.fileLocation)) {
             cache = JSON.parse(readFileSync(this.fileLocation).toString());
@@ -29,7 +33,7 @@ export class TokenCache {
         const now = Date.now();
     
         cache[this.metadata.id] = {
-            dateAdded: cache[this.metadata.id].dateAdded || now,
+            dateAdded: cache[this.metadata.id]?.dateAdded || now,
             dateModified: now,
             token,
             lastKnownIp: this.config.ip,
@@ -48,7 +52,6 @@ export class TokenCache {
         }
     
         const cache: TokenCacheFileFormat = JSON.parse(readFileSync(this.fileLocation).toString());
-    
-        return cache[this.metadata.id].token;
+        return cache[this.metadata.id]?.token;
     }
 }

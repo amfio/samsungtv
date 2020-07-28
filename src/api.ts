@@ -1,4 +1,5 @@
 import WebSocket from 'ws';
+import fetch from 'node-fetch';
 import { SamsungKey, SamsungEvent, SamsungMessage, SamsungMetadata } from './samsung-types';
 import { DeviceConfig } from './types';
 import { TokenCache } from './token-cache';
@@ -15,7 +16,7 @@ export async function connect(config: DeviceConfig) {
 }
 
 interface Command {
-    resolve: () => void;
+    resolve: (data: SamsungMessage) => void;
     reject: (error: any) => void;
 }
 
@@ -28,7 +29,7 @@ export class SamsungApi {
     public deviceMetadata: SamsungMetadata = null;
 
     private currentCommand: Command = null;
-    private connectPromise: Promise<void>;
+    private connectPromise: Promise<SamsungMessage>;
     private webSocket: WebSocket = null;
     private tokenCache: TokenCache = null;
 
@@ -49,16 +50,15 @@ export class SamsungApi {
     }
 
     public async getInstalledApps(): Promise<Array<SamsungApp>> {
-        const apps: any = await this.sendCommand({
-            method: 'ms.channel.emit',
+        const response: any = await this.sendCommand({
+            method: 'ms.channel.emit', 
             params: {
-                data: '',
-                event: 'ed.installedApp.get',
+                event: SamsungEvent.InstalledApps, 
                 to: 'host'
-            }
-        });
+            } 
+        }, true);
 
-        return apps.map((app: any) => {
+        return response?.data?.data?.map((app: any) => {
             return {
                 appId: app.appId,
                 appType: app.app_type,
@@ -75,23 +75,32 @@ export class SamsungApi {
             throw new Error(`No app found with ID "${appId}". Are you sure it is installed?`);
         }
 
-        await this.sendCommand({
+        const response = await this.sendCommand({
             method: 'ms.channel.emit',
             params: {
                 data: {
                     action_type: app.appType === 2 ? 'DEEP_LINK' : 'NATIVE_LAUNCH',
-                    appId,
+                    appId: appId,
                 },
-                event: 'ed.apps.launch',
+                event: SamsungEvent.LaunchApp,
                 to: 'host'
             }
         });
+
+        if (response.data !== 200) {
+            throw new Error(`Failed to launch app: ${response.data}`);
+        }
     }
 
     private async connect() {
-        const appName = Buffer.from(this.config.appName).toString('base64');
-        const wsUrl = `wss://${this.config.ip}:${WSS_PORT}/api/v2/channels/samsung.remote.control?name=${appName}${this.config.token ? `&token=${this.config.token}` : ''}`;
+        this.connectPromise = new Promise<SamsungMessage>((res, rej) => {
+            this.currentCommand = {
+                resolve: res,
+                reject: rej,
+            };
+        });
 
+        const appName = Buffer.from(this.config.appName).toString('base64');
         await this.populateDeviceMetadata();
         
         this.tokenCache = new TokenCache(this.config, this.deviceMetadata);
@@ -102,20 +111,13 @@ export class SamsungApi {
         } else {
             this.tokenCache.saveToken(token);
         }
+        const wsUrl = `wss://${this.config.ip}:${WSS_PORT}/api/v2/channels/samsung.remote.control?name=${appName}${token ? `&token=${token}` : ''}`;
 
         this.webSocket = new WebSocket(wsUrl, null, { rejectUnauthorized: false }) as any;
-
-        this.connectPromise = new Promise((res, rej) => {
-            this.currentCommand = {
-                resolve: res,
-                reject: rej,
-            };
-        });
 
         this.webSocket.on('message', (message) => {
             this.handleMessageReceived(message as any);
         });
-
         this.webSocket.on('response', (response) => {
             console.log('Response received', response)
         });
@@ -133,7 +135,7 @@ export class SamsungApi {
 
     private async populateDeviceMetadata() {
         try {
-            const response = await fetch(`https://${this.config.ip}:${HTTP_PORT}/api/v2/`);
+            const response = await fetch(`http://${this.config.ip}:${HTTP_PORT}/api/v2/`);
 
             if (response.status !== 200) {
                 throw new Error(`Request status ${response.status}`);
@@ -150,7 +152,7 @@ export class SamsungApi {
         this.webSocket = null;
     }
 
-    private async sendCommand(command: any, hasResponse = true) {
+    private async sendCommand(command: any, hasResponse = true): Promise<SamsungMessage> {
         if (!this.webSocket) {
             throw new Error(`Not connected to TV. Call "Connect".`);
         }
@@ -170,7 +172,7 @@ export class SamsungApi {
 
             if (!hasResponse) {
                 setTimeout(() => {
-                    this.resolveCurrentCommand();
+                    this.resolveCurrentCommand(null);
                 }, 500)
             }
         });
@@ -178,7 +180,6 @@ export class SamsungApi {
 
     private handleMessageReceived(messageStr: string) {
         const message: SamsungMessage = JSON.parse(messageStr);
-        console.log('message', message);
         switch (message.event) {
             case SamsungEvent.Unauthorised:
                 this.rejectCurrentCommand('We do not have authorisation to access TV API. You must accept the on-screen prompt.');
@@ -188,8 +189,14 @@ export class SamsungApi {
                     console.log('Token found: ', message.data.token);
                     this.tokenCache.saveToken(message.data.token);
                 }
-                this.resolveCurrentCommand();
+                this.resolveCurrentCommand(message);
                 break;
+                case SamsungEvent.InstalledApps:
+                    this.resolveCurrentCommand(message);
+                    break;
+                case SamsungEvent.LaunchApp:
+                    this.resolveCurrentCommand(message);
+                    break;
             default: 
                 console.log('Unhandled event', message);
         }
@@ -204,9 +211,9 @@ export class SamsungApi {
         }
     }
 
-    private resolveCurrentCommand() {
+    private resolveCurrentCommand(data: SamsungMessage) {
         if (this.currentCommand) {
-            this.currentCommand.resolve();
+            this.currentCommand.resolve(data);
             this.currentCommand = null;
         }
     }
