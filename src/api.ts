@@ -3,9 +3,10 @@ import fetch from 'node-fetch';
 import { SamsungKey, SamsungEvent, SamsungMessage, SamsungMetadata } from './samsung-types';
 import { DeviceConfig } from './types';
 import { TokenCache } from './token-cache';
-
 const HTTP_PORT = 8001;
 const WSS_PORT = 8002;
+
+export { SamsungKey } from './samsung-types';
 
 export async function connect(config: DeviceConfig) {
     const api = new SamsungApi(config);
@@ -85,7 +86,7 @@ export class SamsungApi {
                 event: SamsungEvent.LaunchApp,
                 to: 'host'
             }
-        });
+        }, true);
 
         if (response.data !== 200) {
             throw new Error(`Failed to launch app: ${response.data}`);
@@ -191,12 +192,12 @@ export class SamsungApi {
                 }
                 this.resolveCurrentCommand(message);
                 break;
-                case SamsungEvent.InstalledApps:
-                    this.resolveCurrentCommand(message);
-                    break;
-                case SamsungEvent.LaunchApp:
-                    this.resolveCurrentCommand(message);
-                    break;
+            case SamsungEvent.InstalledApps:
+                this.resolveCurrentCommand(message);
+                break;
+            case SamsungEvent.LaunchApp:
+                this.resolveCurrentCommand(message);
+                break;
             default: 
                 console.log('Unhandled event', message);
         }
@@ -206,7 +207,7 @@ export class SamsungApi {
         if (this.currentCommand) {
             this.currentCommand.reject(error);
             this.currentCommand = null;
-        } else {
+        } else if (this.webSocket) {
             console.error('An error occured outside of an active command', error);
         }
     }
