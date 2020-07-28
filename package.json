@@ -1,5 +1,5 @@
 {
-  "name": "samsungtv",
+  "name": "samsung-tv-api",
   "version": "0.0.1",
   "description": "",
   "main": "./dist/api.js",
